@@ -5,6 +5,7 @@ const express = require('express');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const bcrypt = require('bcrypt');
+const fs = require('fs');
 const saltRounds = 12;
 
 const port = process.env.PORT || 3000;
@@ -14,7 +15,7 @@ const app = express();
 const Joi = require("joi");
 
 
-const expireTime = 24 * 60 * 60 * 1000; //expires after 1 day  (hours * minutes * seconds * millis)
+const expireTime = 60 * 60 * 1000; //expires after 1 hour (minutes * seconds * millis)
 
 /* secret information section */
 const mongodb_host = process.env.MONGODB_HOST;
@@ -45,3 +46,29 @@ app.use(session({
   resave: true
 }
 ));
+
+app.get("/", (req,res) => {
+  res.send('hello');
+})
+
+app.get('/login', (req,res) => {
+  const file = fs.readFileSync('public/html/login.html', 'utf-8');
+  res.send(file);
+})
+
+app.get('/signup', (req,res) => {
+  const file = fs.readFileSync('public/html/signup.html', 'utf-8');
+  res.send(file);
+})
+
+app.get('/main', (req,res) => {
+  if (!req.session.loggedIn) {
+    res.redirect('/login');
+  }
+  res.send('you are logged in');
+})
+
+app.get("*", (req,res) => {
+  res.status(404);
+  res.send("Page not found - 404");
+});
