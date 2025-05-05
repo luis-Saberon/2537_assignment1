@@ -48,12 +48,21 @@ app.use(session({
 ));
 
 app.get("/", (req,res) => {
-  res.send('hello');
+  if(req.session.loggedIn) {
+    res.redirect('/main');
+  }
+  res.redirect('/login');
 })
 
 app.get('/login', (req,res) => {
-  const file = fs.readFileSync('public/html/login.html', 'utf-8');
+  const file = fs.readFileSync('public/html/index.html', 'utf-8');
   res.send(file);
+})
+
+app.post('/login', (req,res) => {
+  const name = req.body.name;
+  const pass = req.body.password;
+  res.send(name + pass);
 })
 
 app.get('/signup', (req,res) => {
@@ -61,14 +70,48 @@ app.get('/signup', (req,res) => {
   res.send(file);
 })
 
+app.post('/signup', async (req,res) => { 
+  const name = req.body.name;
+  const password = req.body.password;
+
+  const schema = Joi.object( {
+    name: Joi.string().alphanum().max(20).required(),
+    password: Joi.string().max(20).required()
+  });
+  const validationResult = schema.validate({name, password});
+  if (validationResult.error != null) {
+    console.log(validationResult.error);
+    res.redirect('/signup');
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+  await userCollection.insertOne({name: name, password: hashedPassword});
+
+  res.send('it worked');
+});
+
 app.get('/main', (req,res) => {
   if (!req.session.loggedIn) {
     res.redirect('/login');
   }
-  res.send('you are logged in');
+
+  const file = fs.readFileSync('public/html/main.html', 'utf-8');
+  res.send(file);
 })
 
+
+app.get('/test', (req,res) => {
+  res.send(userCollection.find());
+})
 app.get("*", (req,res) => {
   res.status(404);
   res.send("Page not found - 404");
 });
+
+
+
+app.listen(port, () => {
+	console.log("Node application listening on port "+port);
+}); 
