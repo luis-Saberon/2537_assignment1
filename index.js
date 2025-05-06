@@ -14,6 +14,7 @@ const app = express();
 
 const Joi = require("joi");
 
+app.use(express.static(__dirname + "/public"));
 
 const expireTime = 60 * 60 * 1000; //expires after 1 hour (minutes * seconds * millis)
 
@@ -48,21 +49,58 @@ app.use(session({
 ));
 
 app.get("/", (req,res) => {
-  if(req.session.loggedIn) {
-    res.redirect('/main');
+  let file;
+  if(req.session.authenticated) {
+     file = fs.readFileSync("public/html/loggedIndex.html", 'utf-8');
+  } else { 
+    file = fs.readFileSync("public/html/unloggedIndex.html", 'utf-8')
   }
-  res.redirect('/login');
+ res.send(file);
 })
 
 app.get('/login', (req,res) => {
-  const file = fs.readFileSync('public/html/index.html', 'utf-8');
+  if(req.session.authenticated) {
+    res.redirect('/')
+    return;
+  }
+  const file = fs.readFileSync('public/html/login.html', 'utf-8');
   res.send(file);
 })
 
-app.post('/login', (req,res) => {
-  const name = req.body.name;
-  const pass = req.body.password;
-  res.send(name + pass);
+app.post('/login', async (req,res) => {
+  const password = req.body.password;
+  const email = req.body.email;
+
+  const schema = Joi.object( {
+    email: Joi.string().max(30).required(),
+    password: Joi.string().max(20).required()
+  });
+
+  const validationResult = schema.validate({email, password});
+  if(validationResult.error != null) {
+    res.send(`${validationResult.error.details[0].message} <a href='/login'>Try Again</a>` );
+    return;
+  }
+
+  const result = await userCollection.find({email: email}).project({email: 1, name: 1, password: 1, _id: 1}).toArray();
+
+
+  if (result.length != 1) {
+    res.send(`Email does not exist <a href='/login'>Try Again</a>`);
+		return;
+	}
+  if (await bcrypt.compare(password, result[0].password)) {
+    req.session.authenticated = true;
+    req.session.name = result[0].name;
+    req.session.email = result[0].email;
+    req.session.cookie.maxAge = expireTime;
+    res.redirect('/');
+    return
+  }
+  else {
+    res.send(`Incorrect password <a href='login'> Try Again</a>`)
+		return;
+	}
 })
 
 app.get('/signup', (req,res) => {
@@ -73,32 +111,49 @@ app.get('/signup', (req,res) => {
 app.post('/signup', async (req,res) => { 
   const name = req.body.name;
   const password = req.body.password;
+  const email = req.body.email;
 
   const schema = Joi.object( {
+    email: Joi.string().max(30).required(),
     name: Joi.string().alphanum().max(20).required(),
     password: Joi.string().max(20).required()
   });
-  const validationResult = schema.validate({name, password});
+
+  const validationResult = schema.validate({email, name, password});
   if (validationResult.error != null) {
-    console.log(validationResult.error);
-    res.redirect('/signup');
+    res.send(`${validationResult.error.details[0].message} <a href='/signup'>Try Again</a>` );
     return;
   }
 
   const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-  await userCollection.insertOne({name: name, password: hashedPassword});
+  await userCollection.insertOne({email: email, name: name, password: hashedPassword});
 
-  res.send('it worked');
+  req.session.authenticated = true;
+  req.session.name = name;
+  req.session.email = email;
+  req.session.cookie.maxAge = expireTime;
+  res.redirect('/');
 });
 
 app.get('/main', (req,res) => {
-  if (!req.session.loggedIn) {
+  if (!req.session.authenticated) {
     res.redirect('/login');
+    return
   }
-
   const file = fs.readFileSync('public/html/main.html', 'utf-8');
   res.send(file);
+})
+
+
+app.get('/signout', (req,res) => {
+  req.session.destroy();
+  res.redirect('/');
+})
+
+
+app.get('/userInfo', (req,res) => {
+  res.send(req.session.name);
 })
 
 
@@ -107,7 +162,7 @@ app.get('/test', (req,res) => {
 })
 app.get("*", (req,res) => {
   res.status(404);
-  res.send("Page not found - 404");
+  res.send(`This page does not exist Click <a href='/'>here</a> to go back to the home page`);
 });
 
 
