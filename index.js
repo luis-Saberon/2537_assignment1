@@ -138,7 +138,7 @@ app.post('/signup', async (req,res) => {
 
 app.get('/main', (req,res) => {
   if (!req.session.authenticated) {
-    res.redirect('/login');
+    res.redirect('/');
     return
   }
   const file = fs.readFileSync('public/html/main.html', 'utf-8');
@@ -156,10 +156,6 @@ app.get('/userInfo', (req,res) => {
   res.send(req.session.name);
 })
 
-
-app.get('/test', (req,res) => {
-  res.send(userCollection.find());
-})
 app.get("*", (req,res) => {
   res.status(404);
   res.send(`This page does not exist Click <a href='/'>here</a> to go back to the home page`);
